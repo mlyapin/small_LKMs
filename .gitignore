@@ -1,0 +1,11 @@
+compile_commands.json
+.DS_Store
+.envrc
+.dir-locals.el
+.cache/
+*.o
+*.ko
+*.cmd
+*.mod*
+*.order
+*.symvers
