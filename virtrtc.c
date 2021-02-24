@@ -19,7 +19,7 @@ struct timer_list timer;
 static void reset_timer(void)
 {
 	/* In case if the timer wouldn't be read for a very long time,
-	 * update the state by ourselves, so we won't loose the time because of
+	 * update the state by ourselves, so we won't lose the time because of
 	 * jiffies overflow. */
 	mod_timer(&timer, state.last_jiffies - 1);
 }
@@ -119,7 +119,8 @@ err:
 
 static int err_to_rc(long err)
 {
-	int ret = (int)err;
+	int ret = (int)err; /* At the time of writing,
+			     * there were not so many errors to overflow any int. */
 	if (unlikely(ret < err)) {
 		BUG();
 	}
@@ -147,7 +148,7 @@ static int virt_rtc_init(void)
 	 * But during the execution of the rtc_register_device() reference counter goes up.
 	 * It seems that the only way to remove the references is to call rtc_device_unregister, but it's static
 	 * and intended to be called by devres framework only.
-	 * So it seems that there in no reasonable way to free the resources without using devres groups.
+	 * So it seems that there is no reasonable way to free the resources without using devres groups.
 	 */
 	/* Devres group to release resources on the module's exit path. */
 	if (!devres_open_group(fake_dev.dev, fake_dev.dev, GFP_KERNEL)) {
@@ -200,3 +201,4 @@ module_init(virt_rtc_init);
 module_exit(virt_rtc_exit);
 
 MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Virtual (not real) RTC device. Repository: https://github.com/mlyapin/virtrtc");
