@@ -94,17 +94,17 @@ static long init_fake_device(void)
 	/* Don't create a device node. */
 	fake_dev.devt = MKDEV(MAJOR(0), 0);
 
-	fake_dev.class = class_create(THIS_MODULE, "virtrtc");
+	fake_dev.class = class_create(THIS_MODULE, "virtrtc_fake");
 	if (IS_ERR(fake_dev.class)) {
-		pr_err("failed to create virtrtc class\n");
+		pr_err("failed to create virtrtc_fake class\n");
 		err = PTR_ERR(fake_dev.class);
 		goto err;
 	}
 
 	fake_dev.dev = device_create(fake_dev.class, NULL, fake_dev.devt, NULL,
-				     "virtrtc");
+				     "virtrtc_fake");
 	if (IS_ERR(fake_dev.dev)) {
-		pr_err("failed to create virtrtc device\n");
+		pr_err("failed to create virtrtc_fake device\n");
 		err = PTR_ERR(fake_dev.dev);
 		goto err_destroy_class;
 	}
