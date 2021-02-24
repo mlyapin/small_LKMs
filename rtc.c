@@ -1,5 +1,6 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/seqlock.h>
 #include <linux/rtc.h>
 #include <linux/device.h>
 #include <linux/jiffies.h>
@@ -7,22 +8,13 @@
 #include <linux/proc_fs.h>
 #include <linux/compiler_attributes.h>
 
-/* Timer functions run in the interrupt context. It's not the brightest idea to use a mutex there.
- * TODO: Replace mutex with spinlock or seqlock. */
-
 static struct {
 	ktime_t last_time;
 	unsigned long last_jiffies;
-	struct mutex mx;
+	spinlock_t lock;
 } state = { 0 };
 
 struct timer_list timer;
-
-static ktime_t time_passed(void)
-{
-	unsigned long delta = jiffies - state.last_jiffies;
-	return jiffies_to_nsecs(delta);
-}
 
 static void reset_timer(void)
 {
@@ -34,10 +26,15 @@ static void reset_timer(void)
 
 static void update_time(void)
 {
-	mutex_lock(&state.mx);
-	state.last_time += time_passed();
-	state.last_jiffies = jiffies;
-	mutex_unlock(&state.mx);
+	unsigned long flags = 0;
+	spin_lock_irqsave(&state.lock, flags);
+
+	unsigned long ljiffies = jiffies;
+	unsigned long delta = ljiffies - state.last_jiffies;
+	state.last_time = ktime_add_ns(state.last_time, jiffies_to_nsecs(delta));
+	state.last_jiffies = ljiffies;
+
+	spin_unlock_irqrestore(&state.lock, flags);
 }
 
 static void virt_rtc_periodic_update(struct timer_list *t __always_unused)
@@ -52,17 +49,28 @@ static int virt_rtc_read_time(struct device *dev __always_unused,
 	update_time();
 	reset_timer();
 
+	/* TODO: There is no need to use locks here, right?
+	 * ktime_t should be of the word's width, so it's read should be atomic
+	 * on the most architectures anyway... */
+	unsigned long flags = 0;
+	spin_lock_irqsave(&state.lock, flags);
+
 	*tm = rtc_ktime_to_tm(state.last_time);
+
+	spin_unlock_irqrestore(&state.lock, flags);
 	return rtc_valid_tm(tm);
 }
 
 static int virt_rtc_set_time(struct device *dev __always_unused,
 			     struct rtc_time *tm)
 {
-	mutex_lock(&state.mx);
-	state.last_jiffies = jiffies;
+	unsigned long flags = 0;
+	spin_lock_irqsave(&state.lock, flags);
+
 	state.last_time = rtc_tm_to_ktime(*tm);
-	mutex_unlock(&state.mx);
+	state.last_jiffies = jiffies;
+
+	spin_unlock_irqrestore(&state.lock, flags);
 
 	return 0;
 }
@@ -158,7 +166,7 @@ static int virt_rtc_init(void)
 
 	state.last_time = 0;
 	state.last_jiffies = jiffies;
-	mutex_init(&state.mx);
+	spin_lock_init(&state.lock);
 
 	timer_setup(&timer, virt_rtc_periodic_update, 0);
 	reset_timer();
@@ -185,7 +193,6 @@ static void virt_rtc_exit(void)
 {
 	del_timer(&timer);
 	devres_release_group(fake_dev.dev, fake_dev.dev);
-	mutex_destroy(&state.mx);
 	destroy_fake_device();
 }
 
