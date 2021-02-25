@@ -1,0 +1,46 @@
+Virtual RTC device for the Linux kernel
+
+* Description
+The module adds a fake RTC device that emulates some subset of a real device.
+It keeps the track of time with the help of a System Timer.
+
+Actually, there is no reason why such a thing should exist because your kernel does pretty much the same thing by itself, only without exposing an RTC device (as far as I know).
+So, there is not much to see here. /Shoo-shoo!/
+
+* What it can and can't emulate
+
+- [X] Read
+- [X] Set
+- [ ] Wake from sleep
+  It would be hard to implement this one without a hardware device.
+
+* How to use it
+
+/I wouldn't if I were you.../
+
+** Prerequisites
+
+You'll need kernel scripts and headers, and some tools to build the module.
+The easiest way to get those is to install from your package manager.
+
+On ArchLinux it would be:
+
+#+begin_src shell
+$ pacman -S linux-headers base-devel
+#+end_src
+
+** Build & Use
+
+Simply run:
+
+#+begin_src shell
+$ git clone https://github.com/mlyapin/virtrtc
+$ cd virtrtc
+$ make modules
+# insmod virtrtc.ko
+# hwclock --set --date "01/02/2010 10:20:45" -f /dev/rtcN
+# watch hwclock -r -f /dev/rtcN
+#+end_src
+
+
+The module will register a device with a ~/dev/rtcN~ node. The exact name will be printed into the kernel log buffer.
