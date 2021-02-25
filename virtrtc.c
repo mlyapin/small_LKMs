@@ -11,7 +11,7 @@
 static struct {
 	ktime_t last_time;
 	unsigned long last_jiffies;
-	spinlock_t lock;
+	seqlock_t lock;
 } state = { 0 };
 
 struct timer_list timer;
@@ -27,14 +27,14 @@ static void reset_timer(void)
 static void update_time(void)
 {
 	unsigned long flags = 0;
-	spin_lock_irqsave(&state.lock, flags);
+	write_seqlock_irqsave(&state.lock, flags);
 
 	unsigned long ljiffies = jiffies;
 	unsigned long delta = ljiffies - state.last_jiffies;
 	state.last_time = ktime_add_ns(state.last_time, jiffies_to_nsecs(delta));
 	state.last_jiffies = ljiffies;
 
-	spin_unlock_irqrestore(&state.lock, flags);
+	write_sequnlock_irqrestore(&state.lock, flags);
 }
 
 static void virt_rtc_periodic_update(struct timer_list *t __always_unused)
@@ -49,15 +49,12 @@ static int virt_rtc_read_time(struct device *dev __always_unused,
 	update_time();
 	reset_timer();
 
-	/* TODO: There is no need to use locks here, right?
-	 * ktime_t should be of the word's width, so it's read should be atomic
-	 * on the most architectures anyway... */
-	unsigned long flags = 0;
-	spin_lock_irqsave(&state.lock, flags);
+	unsigned long seq = 0;
+	do {
+		seq = read_seqbegin(&state.lock);
+		*tm = rtc_ktime_to_tm(state.last_time);
+	} while(read_seqretry(&state.lock, seq));
 
-	*tm = rtc_ktime_to_tm(state.last_time);
-
-	spin_unlock_irqrestore(&state.lock, flags);
 	return rtc_valid_tm(tm);
 }
 
@@ -65,12 +62,12 @@ static int virt_rtc_set_time(struct device *dev __always_unused,
 			     struct rtc_time *tm)
 {
 	unsigned long flags = 0;
-	spin_lock_irqsave(&state.lock, flags);
+	write_seqlock_irqsave(&state.lock, flags);
 
 	state.last_time = rtc_tm_to_ktime(*tm);
 	state.last_jiffies = jiffies;
 
-	spin_unlock_irqrestore(&state.lock, flags);
+	write_sequnlock_irqrestore(&state.lock, flags);
 
 	return 0;
 }
@@ -167,7 +164,7 @@ static int virt_rtc_init(void)
 
 	state.last_time = 0;
 	state.last_jiffies = jiffies;
-	spin_lock_init(&state.lock);
+	seqlock_init(&state.lock);
 
 	timer_setup(&timer, virt_rtc_periodic_update, 0);
 	reset_timer();
