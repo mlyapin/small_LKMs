@@ -162,7 +162,7 @@ static int virt_rtc_init(void)
 
 	rtcvirt->ops = &virt_rtc_ops;
 
-	state.last_time = 0;
+	state.last_time = ktime_get_real();
 	state.last_jiffies = jiffies;
 	seqlock_init(&state.lock);
 
